@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <unordered_set>
 
 ReplayBuffer::ReplayBuffer(std::size_t capacity, std::uint32_t seed)
     : capacity_(capacity), rng_(seed) {
@@ -23,17 +24,23 @@ std::vector<Transition> ReplayBuffer::sample(std::size_t batch_size) {
         throw std::invalid_argument("Cannot sample more transitions than available");
     }
 
-    std::vector<std::size_t> indices(data_.size());
-    for (std::size_t i = 0; i < indices.size(); ++i) {
-        indices[i] = i;
-    }
-    std::shuffle(indices.begin(), indices.end(), rng_);
+    // Draw only batch_size unique indices instead of shuffling the entire replay
+    // buffer on every optimization step. For the common case batch_size << size,
+    // this reduces sampling work from O(N) to approximately O(batch_size).
+    std::uniform_int_distribution<std::size_t> index_dist(0, data_.size() - 1);
+    std::unordered_set<std::size_t> selected;
+    selected.reserve(batch_size * 2);
 
     std::vector<Transition> batch;
     batch.reserve(batch_size);
-    for (std::size_t i = 0; i < batch_size; ++i) {
-        batch.push_back(data_[indices[i]]);
+
+    while (batch.size() < batch_size) {
+        const auto index = index_dist(rng_);
+        if (selected.insert(index).second) {
+            batch.push_back(data_[index]);
+        }
     }
+
     return batch;
 }
 
