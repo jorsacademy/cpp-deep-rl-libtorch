@@ -1,8 +1,11 @@
 #include "dqn.hpp"
 
+#include <torch/nn/utils/clip_grad.h>
+
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <tuple>
 #include <unordered_set>
 
 ReplayBuffer::ReplayBuffer(std::size_t capacity, std::uint32_t seed)
@@ -156,7 +159,8 @@ bool DQNAgent::optimize() {
     torch::Tensor target_q;
     {
         torch::NoGradGuard no_grad;
-        const auto next_q = target_->forward(next_state_tensor).max(1).values;
+        const auto max_result = target_->forward(next_state_tensor).max(1);
+        const auto next_q = std::get<0>(max_result);
         target_q = reward_tensor + config_.gamma * nonterminal_tensor * next_q;
     }
 
